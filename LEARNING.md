@@ -10,7 +10,7 @@ A folder-by-folder walkthrough of the architecture and 15 interview Q&As.
 
 **`provider.ts`** defines an `AIProvider` interface with 5 methods: `parseSearchQuery`, `generateEmbedding`, `compareProperties`, `generateListing`, `generateFollowUp`. A factory function `getAIProvider()` lazy-loads the Gemini implementation. This pattern means swapping to OpenAI or Claude requires only one new file.
 
-**`gemini.ts`** implements the provider using `@google/genai`. Each method uses a different temperature (0.1 for search parsing where precision matters, 0.5 for creative listing writing). It includes `extractJSON()` to strip markdown code fences from AI output, and a retry loop: if Zod validation fails, the error is appended to the prompt for one retry before falling back.
+**`gemini.ts`** implements the provider using direct REST calls to the Gemini v1 API. Each method uses a different temperature (0.1 for search parsing where precision matters, 0.5 for creative listing writing). It includes `extractJSON()` to strip markdown code fences from AI output, and a retry loop: if Zod validation fails, the error is appended to the prompt for one retry before falling back.
 
 **`schemas.ts`** contains Zod schemas for every AI output shape. The `AISearchFilterSchema` defines the exact JSON structure Gemini must return: areas, bedrooms_min/max, price range, booleans. This is the **core security boundary** — the AI can only express filters the schema allows.
 

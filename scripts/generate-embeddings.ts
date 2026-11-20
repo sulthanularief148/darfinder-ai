@@ -1,11 +1,15 @@
+if (typeof globalThis.WebSocket === 'undefined') {
+  (globalThis as any).WebSocket = class FakeWebSocket { close() {} };
+}
+
+import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
-import { GoogleGenAI } from '@google/genai';
 import { createHash } from 'crypto';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const geminiKey = process.env.GEMINI_API_KEY!;
-const embeddingModel = process.env.GEMINI_EMBEDDING_MODEL || 'text-embedding-004';
+const embeddingModel = process.env.GEMINI_EMBEDDING_MODEL || 'gemini-embedding-001';
 
 if (!supabaseUrl || !serviceKey || !geminiKey) {
   console.error('Missing env vars: NEXT_PUBLIC_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, GEMINI_API_KEY');
@@ -13,7 +17,6 @@ if (!supabaseUrl || !serviceKey || !geminiKey) {
 }
 
 const supabase = createClient(supabaseUrl, serviceKey);
-const genai = new GoogleGenAI({ apiKey: geminiKey });
 
 function buildEmbeddingText(property: Record<string, unknown>): string {
   const parts = [
@@ -31,7 +34,30 @@ function buildEmbeddingText(property: Record<string, unknown>): string {
   return parts.filter(Boolean).join('. ');
 }
 
+async function embedText(text: string): Promise<number[] | null> {
+  const url = `https://generativelanguage.googleapis.com/v1/models/${embeddingModel}:embedContent?key=${geminiKey}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: `models/${embeddingModel}`,
+      content: { parts: [{ text }] },
+      outputDimensionality: 768,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    console.error(`Embedding API error: ${err}`);
+    return null;
+  }
+
+  const data = await res.json();
+  return data.embedding?.values || null;
+}
+
 async function main() {
+  console.log(`Using embedding model: ${embeddingModel}`);
   console.log('Fetching properties...');
   const { data: properties, error } = await supabase
     .from('properties')
@@ -52,7 +78,6 @@ async function main() {
     const text = buildEmbeddingText(property);
     const contentHash = createHash('sha256').update(text).digest('hex');
 
-    // Check if embedding already exists with same content hash
     const { data: existing } = await supabase
       .from('property_embeddings')
       .select('content_hash')
@@ -64,19 +89,12 @@ async function main() {
       continue;
     }
 
-    // Generate embedding
-    const response = await genai.models.embedContent({
-      model: embeddingModel,
-      contents: text,
-    });
-
-    const embedding = response.embeddings?.[0]?.values;
+    const embedding = await embedText(text);
     if (!embedding) {
-      console.warn(`No embedding returned for ${property.id}`);
+      console.warn(`\nNo embedding returned for ${property.id}`);
       continue;
     }
 
-    // Upsert embedding
     const { error: upsertError } = await supabase
       .from('property_embeddings')
       .upsert(
@@ -89,14 +107,13 @@ async function main() {
       );
 
     if (upsertError) {
-      console.error(`Failed to upsert embedding for ${property.id}:`, upsertError.message);
+      console.error(`\nFailed to upsert embedding for ${property.id}:`, upsertError.message);
     } else {
       created++;
       process.stdout.write(`\r  Embedded ${created}/${properties.length - skipped}...`);
     }
 
-    // Rate limit: Gemini free tier is 15 RPM for embeddings
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   console.log(`\nDone! Created: ${created}, Skipped (unchanged): ${skipped}`);

@@ -7,6 +7,14 @@
  * Uses the service role key to bypass RLS for seeding.
  */
 
+// Polyfill WebSocket for Node.js < 22 (supabase-js requires it)
+if (typeof globalThis.WebSocket === 'undefined') {
+  (globalThis as any).WebSocket = class FakeWebSocket {
+    close() {}
+  };
+}
+
+import 'dotenv/config';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
