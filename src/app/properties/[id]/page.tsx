@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { PropertyGallery } from '@/components/property/property-gallery';
 import { PropertyDetails } from '@/components/property/property-details';
 import { PropertyMap } from '@/components/property/property-map';
+import { EnquiryForm } from '@/components/property/enquiry-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Property } from '@/types';
 
@@ -108,9 +109,10 @@ export default function PropertyDetailPage() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.1 }}
-            className="lg:col-span-2"
+            className="lg:col-span-2 space-y-6"
           >
             <PropertyDetails property={property} agent={property.agents} />
+            <EnquiryForm propertyId={property.id} propertyTitle={property.title} />
           </motion.div>
         </div>
       </div>

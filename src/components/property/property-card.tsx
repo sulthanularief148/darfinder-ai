@@ -2,9 +2,10 @@
 
 import Link from 'next/link';
 import { motion } from 'framer-motion';
-import { Bed, Bath, Maximize, MapPin, PawPrint, Train, Sofa } from 'lucide-react';
+import { Bed, Bath, Maximize, MapPin, PawPrint, Train, Sofa, Scale } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { PlaceholderImage } from '@/components/layout/placeholder-image';
+import { useCompare } from '@/hooks/use-compare';
 import { formatPrice } from '@/lib/utils';
 import type { Property } from '@/types';
 
@@ -15,6 +16,8 @@ interface PropertyCardProps {
 
 export function PropertyCard({ property, index = 0 }: PropertyCardProps) {
   const isRent = property.purpose === 'rent';
+  const compare = useCompare();
+  const inCompare = compare.has(property.id);
 
   return (
     <motion.div
@@ -38,7 +41,22 @@ export function PropertyCard({ property, index = 0 }: PropertyCardProps) {
                 {property.type}
               </Badge>
             </div>
-            <div className="absolute bottom-3 right-3">
+            <div className="absolute bottom-3 right-3 flex items-center gap-2">
+              <button
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  inCompare ? compare.remove(property.id) : compare.add(property.id);
+                }}
+                className={`h-8 w-8 rounded-lg flex items-center justify-center transition-colors cursor-pointer ${
+                  inCompare
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background/70 backdrop-blur-sm text-foreground hover:bg-primary/80 hover:text-primary-foreground'
+                }`}
+                title={inCompare ? 'Remove from compare' : 'Add to compare'}
+              >
+                <Scale className="h-4 w-4" />
+              </button>
               <div className="price-badge">
                 {formatPrice(property.price_aed)}
                 {isRent && <span className="text-xs opacity-80">/yr</span>}

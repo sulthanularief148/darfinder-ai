@@ -4,6 +4,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { ThemeProvider } from '@/components/layout/theme-provider';
 import { Header } from '@/components/layout/header';
 import { Footer } from '@/components/layout/footer';
+import { CompareSelector } from '@/components/compare/compare-selector';
 import './globals.css';
 
 const inter = Inter({
@@ -40,6 +41,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           <TooltipProvider>
             <Header />
             <main className="flex-1 pt-16">{children}</main>
+            <CompareSelector />
             <Footer />
           </TooltipProvider>
         </ThemeProvider>
