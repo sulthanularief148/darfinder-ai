@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, Suspense, useCallback } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { SearchBar } from '@/components/search/search-bar';
 import { FilterBar } from '@/components/search/filter-bar';
@@ -52,7 +52,12 @@ function PropertiesContent() {
   const [aiFilters, setAiFilters] = useState<SearchFilters | null>(null);
   const [aiReasoning, setAiReasoning] = useState<string | null>(null);
   const [isAISearch, setIsAISearch] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [allAIResults, setAllAIResults] = useState<Property[]>([]);
+  const resultsRef = useRef<HTMLDivElement>(null);
 
+  const PER_PAGE = 12;
   const query = searchParams.get('q') || '';
 
   // AI search when ?q= is present
@@ -67,7 +72,16 @@ function PropertiesContent() {
       });
       if (res.ok) {
         const result: AISearchResponse = await res.json();
-        setData({ properties: result.properties, total: result.total });
+        setAllAIResults(result.properties);
+        const pages = Math.max(1, Math.ceil(result.total / PER_PAGE));
+        setTotalPages(pages);
+        setCurrentPage(1);
+        setData({
+          properties: result.properties.slice(0, PER_PAGE),
+          total: result.total,
+          page: 1,
+          totalPages: pages,
+        });
         setAiFilters(result.filters);
         setAiReasoning(result.reasoning);
       } else if (res.status === 429) {
@@ -85,17 +99,23 @@ function PropertiesContent() {
   }, []);
 
   // Traditional filter search
-  const doFilterSearch = useCallback(async () => {
+  const doFilterSearch = useCallback(async (page = 1) => {
     setLoading(true);
     setIsAISearch(false);
     setAiFilters(null);
     setAiReasoning(null);
+    setAllAIResults([]);
     try {
       const params = new URLSearchParams(searchParams.toString());
       params.delete('q');
+      params.set('page', String(page));
+      params.set('limit', String(PER_PAGE));
       const res = await fetch(`/api/properties?${params.toString()}`);
       if (res.ok) {
-        setData(await res.json());
+        const result: ApiResponse = await res.json();
+        setData(result);
+        setCurrentPage(result.page ?? page);
+        setTotalPages(result.totalPages ?? 1);
       }
     } catch {
       // Network error
@@ -142,9 +162,25 @@ function PropertiesContent() {
     router.push('/properties');
   }
 
+  function handlePageChange(newPage: number) {
+    if (isAISearch && allAIResults.length > 0) {
+      const start = (newPage - 1) * PER_PAGE;
+      setData({
+        properties: allAIResults.slice(start, start + PER_PAGE),
+        total: allAIResults.length,
+        page: newPage,
+        totalPages: Math.ceil(allAIResults.length / PER_PAGE),
+      });
+      setCurrentPage(newPage);
+    } else {
+      doFilterSearch(newPage);
+    }
+    resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+
   return (
     <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-7xl mx-auto">
+      <div ref={resultsRef} className="max-w-7xl mx-auto">
         {/* Search bar */}
         <div className="max-w-2xl mx-auto mb-6">
           <SearchBar />
@@ -168,6 +204,10 @@ function PropertiesContent() {
           onFilterRemove={handleFilterRemove}
           onFilterClear={handleFilterClear}
           onClearSearch={handleClearSearch}
+          page={currentPage}
+          totalPages={totalPages}
+          onPageChange={handlePageChange}
+          perPage={PER_PAGE}
         />
       </div>
     </div>

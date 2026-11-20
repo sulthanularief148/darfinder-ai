@@ -21,9 +21,11 @@ export function PropertyCard({ property, index = 0 }: PropertyCardProps) {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay: index * 0.05, duration: 0.4 }}
+      initial={{ opacity: 0, y: 30 }}
+      whileInView={{ opacity: 1, y: 0 }}
+      viewport={{ once: true, margin: '-50px' }}
+      transition={{ delay: index * 0.06, duration: 0.5, ease: 'easeOut' }}
+      whileHover={{ scale: 1.02 }}
     >
       <Link href={`/properties/${property.id}`} className="block group">
         <div className="glass-card-hover rounded-2xl overflow-hidden">
@@ -33,6 +35,7 @@ export function PropertyCard({ property, index = 0 }: PropertyCardProps) {
               index={index}
               className="w-full h-full transition-transform duration-500 group-hover:scale-110"
             />
+            <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-black/60 to-transparent pointer-events-none" />
             <div className="absolute top-3 left-3 flex gap-2">
               <Badge className={isRent ? 'bg-cyan/90 text-white' : 'bg-gold/90 text-background'}>
                 {isRent ? 'Rent' : 'Buy'}
