@@ -198,5 +198,18 @@ export interface Database {
         };
       };
     };
+    Views: Record<string, never>;
+    Functions: {
+      match_properties: {
+        Args: {
+          query_embedding: string;
+          match_count?: number;
+          property_ids?: string[];
+        };
+        Returns: { id: string; similarity: number }[];
+      };
+    };
+    Enums: Record<string, never>;
+    CompositeTypes: Record<string, never>;
   };
 }

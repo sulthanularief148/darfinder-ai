@@ -2,15 +2,11 @@
 
 import { useState, useEffect, Suspense, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { motion } from 'framer-motion';
-import { LayoutGrid, Map, Loader2, SearchX } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { SearchBar } from '@/components/search/search-bar';
 import { FilterBar } from '@/components/search/filter-bar';
-import { PropertyCard } from '@/components/property/property-card';
-import { MapView } from '@/components/map/map-view';
-import type { Property } from '@/types';
+import { SearchResults } from '@/components/search/search-results';
+import { Skeleton } from '@/components/ui/skeleton';
+import type { Property, SearchFilters } from '@/types';
 
 export default function PropertiesPage() {
   return (
@@ -37,45 +33,114 @@ export default function PropertiesPage() {
 interface ApiResponse {
   properties: Property[];
   total: number;
-  page: number;
-  totalPages: number;
+  page?: number;
+  totalPages?: number;
+}
+
+interface AISearchResponse {
+  properties: Property[];
+  total: number;
+  filters: SearchFilters;
+  reasoning: string;
 }
 
 function PropertiesContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [view, setView] = useState<'grid' | 'map'>(
-    searchParams.get('view') === 'map' ? 'map' : 'grid'
-  );
   const [data, setData] = useState<ApiResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [aiFilters, setAiFilters] = useState<SearchFilters | null>(null);
+  const [aiReasoning, setAiReasoning] = useState<string | null>(null);
+  const [isAISearch, setIsAISearch] = useState(false);
 
-  const fetchProperties = useCallback(async () => {
+  const query = searchParams.get('q') || '';
+
+  // AI search when ?q= is present
+  const doAISearch = useCallback(async (q: string) => {
     setLoading(true);
+    setIsAISearch(true);
     try {
-      const res = await fetch(`/api/properties?${searchParams.toString()}`);
+      const res = await fetch('/api/search', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query: q }),
+      });
+      if (res.ok) {
+        const result: AISearchResponse = await res.json();
+        setData({ properties: result.properties, total: result.total });
+        setAiFilters(result.filters);
+        setAiReasoning(result.reasoning);
+      } else if (res.status === 429) {
+        const err = await res.json();
+        setAiReasoning(`Rate limited: ${err.error}`);
+        setData({ properties: [], total: 0 });
+      } else {
+        setData({ properties: [], total: 0 });
+      }
+    } catch {
+      setData({ properties: [], total: 0 });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // Traditional filter search
+  const doFilterSearch = useCallback(async () => {
+    setLoading(true);
+    setIsAISearch(false);
+    setAiFilters(null);
+    setAiReasoning(null);
+    try {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('q');
+      const res = await fetch(`/api/properties?${params.toString()}`);
       if (res.ok) {
         setData(await res.json());
       }
     } catch {
-      // Network error — data stays null
+      // Network error
     } finally {
       setLoading(false);
     }
   }, [searchParams]);
 
   useEffect(() => {
-    fetchProperties();
-  }, [fetchProperties]);
+    if (query) {
+      doAISearch(query);
+    } else {
+      doFilterSearch();
+    }
+  }, [query, doAISearch, doFilterSearch]);
 
-  function setPage(page: number) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set('page', String(page));
+  function handleFilterRemove(key: keyof SearchFilters) {
+    if (!aiFilters) return;
+    const updated = { ...aiFilters };
+    delete updated[key];
+    setAiFilters(updated);
+
+    // Re-run with remaining filters as traditional search
+    const params = new URLSearchParams();
+    if (updated.purpose) params.set('purpose', updated.purpose);
+    if (updated.propertyType) params.set('type', updated.propertyType);
+    if (updated.areas?.length) params.set('area', updated.areas[0]);
+    if (updated.minBedrooms !== undefined) params.set('bedrooms_min', String(updated.minBedrooms));
+    if (updated.maxBedrooms !== undefined) params.set('bedrooms_max', String(updated.maxBedrooms));
+    if (updated.minPrice !== undefined) params.set('price_min', String(updated.minPrice));
+    if (updated.maxPrice !== undefined) params.set('price_max', String(updated.maxPrice));
+    if (updated.furnished) params.set('furnished', 'true');
+    if (updated.petFriendly) params.set('pet_friendly', 'true');
+    if (updated.nearMetro) params.set('near_metro', 'true');
+
     router.push(`/properties?${params.toString()}`);
   }
 
-  const properties = data?.properties ?? [];
-  const query = searchParams.get('q') || '';
+  function handleFilterClear() {
+    router.push('/properties');
+  }
+
+  function handleClearSearch() {
+    router.push('/properties');
+  }
 
   return (
     <div className="min-h-screen pt-24 pb-16 px-4 sm:px-6 lg:px-8">
@@ -85,123 +150,25 @@ function PropertiesContent() {
           <SearchBar />
         </div>
 
-        {/* Filters + View toggle */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-          <div className="flex-1">
+        {/* Show traditional filters only when not in AI search mode */}
+        {!isAISearch && (
+          <div className="mb-6">
             <FilterBar />
           </div>
-          <div className="flex gap-1 glass-card rounded-xl p-1 self-start">
-            <Button
-              variant={view === 'grid' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setView('grid')}
-              className="rounded-lg"
-            >
-              <LayoutGrid className="h-4 w-4 mr-1" />
-              Grid
-            </Button>
-            <Button
-              variant={view === 'map' ? 'default' : 'ghost'}
-              size="sm"
-              onClick={() => setView('map')}
-              className="rounded-lg"
-            >
-              <Map className="h-4 w-4 mr-1" />
-              Map
-            </Button>
-          </div>
-        </div>
-
-        {/* Results header */}
-        <div className="flex items-center justify-between mb-4">
-          <p className="text-sm text-muted-foreground">
-            {loading ? (
-              'Searching...'
-            ) : (
-              <>
-                <span className="font-medium text-foreground">{data?.total ?? 0}</span>{' '}
-                properties found
-                {query && (
-                  <span>
-                    {' '}for &ldquo;<span className="text-primary">{query}</span>&rdquo;
-                  </span>
-                )}
-              </>
-            )}
-          </p>
-        </div>
-
-        {/* Loading state */}
-        {loading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-            {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-80 rounded-2xl" />
-            ))}
-          </div>
         )}
 
-        {/* Empty state */}
-        {!loading && properties.length === 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="text-center py-20"
-          >
-            <SearchX className="h-16 w-16 text-muted-foreground/30 mx-auto mb-4" />
-            <h2 className="text-xl font-semibold mb-2">No properties found</h2>
-            <p className="text-muted-foreground mb-6">
-              Try adjusting your filters or search with different terms.
-            </p>
-            <Button onClick={() => router.push('/properties')} className="btn-gold rounded-xl">
-              Clear all filters
-            </Button>
-          </motion.div>
-        )}
-
-        {/* Grid view */}
-        {!loading && properties.length > 0 && view === 'grid' && (
-          <>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-              {properties.map((property, i) => (
-                <PropertyCard key={property.id} property={property} index={i} />
-              ))}
-            </div>
-
-            {/* Pagination */}
-            {data && data.totalPages > 1 && (
-              <div className="flex items-center justify-center gap-2 mt-10">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={data.page <= 1}
-                  onClick={() => setPage(data.page - 1)}
-                  className="rounded-lg"
-                >
-                  Previous
-                </Button>
-                <span className="text-sm text-muted-foreground px-3">
-                  Page {data.page} of {data.totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={data.page >= data.totalPages}
-                  onClick={() => setPage(data.page + 1)}
-                  className="rounded-lg"
-                >
-                  Next
-                </Button>
-              </div>
-            )}
-          </>
-        )}
-
-        {/* Map view */}
-        {!loading && properties.length > 0 && view === 'map' && (
-          <div className="h-[600px] rounded-2xl overflow-hidden">
-            <MapView properties={properties} />
-          </div>
-        )}
+        {/* Search results */}
+        <SearchResults
+          properties={data?.properties ?? []}
+          total={data?.total ?? 0}
+          filters={aiFilters}
+          reasoning={aiReasoning}
+          loading={loading}
+          isAISearch={isAISearch}
+          onFilterRemove={handleFilterRemove}
+          onFilterClear={handleFilterClear}
+          onClearSearch={handleClearSearch}
+        />
       </div>
     </div>
   );
