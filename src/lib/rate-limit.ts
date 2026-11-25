@@ -1,3 +1,6 @@
+// In-memory rate limiter — works per-instance. On Vercel serverless each
+// function invocation may be a fresh instance, so this is best-effort.
+// For stricter enforcement, swap to Vercel KV or Upstash Redis.
 const hits = new Map<string, number[]>();
 
 const WINDOW_MS = 60 * 60 * 1000; // 1 hour

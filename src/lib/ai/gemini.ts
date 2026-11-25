@@ -19,7 +19,7 @@ function getKey() {
 }
 
 function getModel() {
-  return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+  return process.env.GEMINI_MODEL || 'gemini-2.0-flash';
 }
 
 function getEmbeddingModel() {
